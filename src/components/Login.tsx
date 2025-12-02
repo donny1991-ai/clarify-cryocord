@@ -88,7 +88,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               src="/clarify-logo-v3.png" 
               alt="Clarify by CryoCord" 
               className="object-contain" 
-              style={{ width: '600px', height: '200px' }}
+              style={{ width: '1600px', height: '532px' }}
             />
           </div>
           <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight text-gray-800">
