@@ -96,7 +96,45 @@ export const MainApp: React.FC<MainAppProps> = ({ onSwitchToAdmin, userEmail }) 
   };
 
   return (
-    <div className="min-h-screen flex flex-col fade-in relative z-30 bg-gray-50/90">
+    <div className="min-h-screen flex flex-col fade-in relative">
+      {/* Ambient Background */}
+      <div id="ambient-background" className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        {/* Cell 1 */}
+        <div className="absolute top-[10%] left-[10%] w-[400px] h-[400px] cell-1">
+          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-pink-200/40 to-red-200/30 blur-sm"></div>
+          <div className="absolute inset-2 rounded-full bg-gradient-to-br from-pink-100/30 to-red-100/20"></div>
+          <div className="nucleus absolute top-1/2 left-1/2 w-32 h-32 rounded-full bg-gradient-to-br from-red-300/40 to-pink-300/30"></div>
+          <div className="absolute top-[30%] left-[25%] w-8 h-8 rounded-full bg-red-200/30"></div>
+        </div>
+
+        {/* Cell 2 */}
+        <div className="absolute top-[40%] right-[8%] w-[320px] h-[320px] cell-2">
+          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-rose-200/35 to-pink-200/25 blur-sm"></div>
+          <div className="absolute inset-2 rounded-full bg-gradient-to-br from-rose-100/25 to-pink-100/15"></div>
+          <div className="nucleus absolute top-1/2 left-1/2 w-24 h-24 rounded-full bg-gradient-to-br from-rose-300/35 to-red-300/25"></div>
+          <div className="absolute top-[25%] left-[70%] w-7 h-7 rounded-full bg-rose-200/25"></div>
+        </div>
+
+        {/* Cell 3 */}
+        <div className="absolute bottom-[15%] left-[25%] w-[280px] h-[280px] cell-3">
+          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-red-200/30 to-rose-200/20 blur-sm"></div>
+          <div className="absolute inset-2 rounded-full bg-gradient-to-br from-red-100/20 to-rose-100/15"></div>
+          <div className="nucleus absolute top-1/2 left-1/2 w-20 h-20 rounded-full bg-gradient-to-br from-red-300/30 to-rose-300/20"></div>
+        </div>
+
+        {/* Cell 4 */}
+        <div className="absolute top-[8%] right-[18%] w-[240px] h-[240px] cell-4">
+          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-pink-200/28 to-red-200/18 blur-sm"></div>
+          <div className="absolute inset-2 rounded-full bg-gradient-to-br from-pink-100/18 to-red-100/12"></div>
+          <div className="nucleus absolute top-1/2 left-1/2 w-16 h-16 rounded-full bg-gradient-to-br from-pink-300/28 to-red-300/18"></div>
+        </div>
+
+        {/* Particles */}
+        <div className="absolute top-[20%] right-[30%] w-3 h-3 rounded-full bg-red-400/40 particle-1"></div>
+        <div className="absolute bottom-[30%] left-[40%] w-2 h-2 rounded-full bg-pink-400/35 particle-2"></div>
+        <div className="absolute top-[60%] right-[15%] w-2.5 h-2.5 rounded-full bg-rose-400/30 particle-3"></div>
+      </div>
+
       {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -124,7 +162,7 @@ export const MainApp: React.FC<MainAppProps> = ({ onSwitchToAdmin, userEmail }) 
       </header>
 
       {/* Main Content */}
-      <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+      <main className="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full relative z-10">
         {/* Search */}
         <div className="max-w-3xl mx-auto mb-12 text-center space-y-6">
           <h1 className="text-4xl font-bold text-gray-900">Scientific Answers, Simplified.</h1>
