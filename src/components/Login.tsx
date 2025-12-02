@@ -92,7 +92,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             />
           </div>
           <h1 className="text-3xl lg:text-4xl font-semibold tracking-tight text-gray-800">
-            Clear answers, clarity, for every customer.
+            Clear simple answers, for every customer.
           </h1>
         </div>
       </div>
