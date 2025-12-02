@@ -1,0 +1,656 @@
+# 🤖 Complete Vertex AI RAG Backend Setup
+
+## 🎯 Overview
+
+This guide shows you how to set up a complete backend with:
+- ✅ Vertex AI RAG (Retrieval Augmented Generation)
+- ✅ File upload and knowledge base management
+- ✅ Firebase Authentication
+- ✅ CORS configuration for your frontend
+
+---
+
+## 📦 **Complete Backend Code**
+
+### **requirements.txt**
+
+```txt
+flask==3.0.0
+flask-cors==4.0.0
+firebase-admin==6.3.0
+google-cloud-aiplatform==1.38.0
+google-cloud-storage==2.14.0
+PyPDF2==3.0.1
+python-docx==1.1.0
+gunicorn==21.2.0
+```
+
+---
+
+### **main.py - Complete Backend with RAG**
+
+```python
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import firebase_admin
+from firebase_admin import auth, credentials
+from google.cloud import storage, aiplatform
+import vertexai
+from vertexai.preview import rag
+from vertexai.generative_models import GenerativeModel
+import os
+import tempfile
+from datetime import datetime
+import json
+
+# Initialize Flask
+app = Flask(__name__)
+
+# Enable CORS for your Firebase URLs
+CORS(app, 
+    origins=[
+        'https://cryocord-ai-platform.web.app',
+        'https://cryocord-ai-platform.firebaseapp.com',
+        'http://localhost:3000'
+    ],
+    allow_headers=['Content-Type', 'Authorization'],
+    methods=['GET', 'POST', 'OPTIONS', 'DELETE'],
+    supports_credentials=True
+)
+
+# Configuration
+PROJECT_ID = 'cryocord-ai-platform'
+LOCATION = 'us-central1'
+BUCKET_NAME = f'{PROJECT_ID}-rag-docs'
+RAG_CORPUS_NAME = 'cryocord-sales-corpus'
+
+# Initialize Firebase Admin
+cred = credentials.ApplicationDefault()
+firebase_admin.initialize_app(cred, {
+    'projectId': PROJECT_ID
+})
+
+# Initialize Vertex AI
+vertexai.init(project=PROJECT_ID, location=LOCATION)
+aiplatform.init(project=PROJECT_ID, location=LOCATION)
+
+# Initialize Cloud Storage
+storage_client = storage.Client()
+
+# Global variables
+rag_corpus = None
+model = GenerativeModel('gemini-1.5-flash')
+
+def verify_firebase_token():
+    """Verify Firebase ID token from request"""
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return None, 'Missing or invalid Authorization header'
+    
+    id_token = auth_header.split('Bearer ')[1]
+    
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        return decoded_token, None
+    except Exception as e:
+        return None, str(e)
+
+def ensure_bucket_exists():
+    """Create storage bucket if it doesn't exist"""
+    try:
+        bucket = storage_client.get_bucket(BUCKET_NAME)
+        print(f"Bucket {BUCKET_NAME} already exists")
+        return bucket
+    except:
+        bucket = storage_client.create_bucket(BUCKET_NAME, location=LOCATION)
+        print(f"Created bucket {BUCKET_NAME}")
+        return bucket
+
+def get_or_create_rag_corpus():
+    """Get existing RAG corpus or create new one"""
+    global rag_corpus
+    
+    if rag_corpus:
+        return rag_corpus
+    
+    try:
+        # Try to get existing corpus
+        corpus_name = f"projects/{PROJECT_ID}/locations/{LOCATION}/ragCorpora/{RAG_CORPUS_NAME}"
+        rag_corpus = rag.get_corpus(name=corpus_name)
+        print(f"Found existing RAG corpus: {RAG_CORPUS_NAME}")
+        return rag_corpus
+    except:
+        # Create new corpus
+        try:
+            rag_corpus = rag.create_corpus(
+                display_name=RAG_CORPUS_NAME,
+                description="CryoCord sales compliance knowledge base"
+            )
+            print(f"Created new RAG corpus: {RAG_CORPUS_NAME}")
+            return rag_corpus
+        except Exception as e:
+            print(f"Error creating RAG corpus: {e}")
+            return None
+
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'service': 'cryocord-sales-query',
+        'vertex_rag': 'enabled'
+    }), 200
+
+@app.route('/upload', methods=['POST', 'OPTIONS'])
+def upload_file():
+    """Upload file to knowledge base"""
+    
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    # Verify authentication
+    user, error = verify_firebase_token()
+    if error:
+        return jsonify({'error': error}), 401
+    
+    # Check if file is present
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    # Get file metadata
+    file_type = request.form.get('type', 'document')
+    description = request.form.get('description', '')
+    
+    try:
+        # Ensure bucket exists
+        bucket = ensure_bucket_exists()
+        
+        # Generate unique filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_filename = f"{timestamp}_{file.filename}"
+        
+        # Upload to Cloud Storage
+        blob = bucket.blob(f"uploads/{safe_filename}")
+        blob.upload_from_file(file)
+        
+        # Make file publicly readable (optional)
+        # blob.make_public()
+        
+        # Get or create RAG corpus
+        corpus = get_or_create_rag_corpus()
+        if not corpus:
+            return jsonify({'error': 'Failed to initialize RAG corpus'}), 500
+        
+        # Import file into RAG corpus
+        gcs_uri = f"gs://{BUCKET_NAME}/uploads/{safe_filename}"
+        
+        # Import file to RAG
+        rag_file = rag.import_files(
+            corpus_name=corpus.name,
+            paths=[gcs_uri],
+            chunk_size=512,
+            chunk_overlap=100
+        )
+        
+        return jsonify({
+            'success': True,
+            'filename': safe_filename,
+            'gcs_uri': gcs_uri,
+            'type': file_type,
+            'description': description,
+            'uploaded_by': user.get('email', 'unknown'),
+            'timestamp': timestamp
+        }), 200
+        
+    except Exception as e:
+        print(f"Upload error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/files', methods=['GET'])
+def list_files():
+    """List all uploaded files"""
+    
+    # Verify authentication
+    user, error = verify_firebase_token()
+    if error:
+        return jsonify({'error': error}), 401
+    
+    try:
+        bucket = storage_client.get_bucket(BUCKET_NAME)
+        blobs = bucket.list_blobs(prefix='uploads/')
+        
+        files = []
+        for blob in blobs:
+            files.append({
+                'name': blob.name.replace('uploads/', ''),
+                'size': blob.size,
+                'created': blob.time_created.isoformat(),
+                'updated': blob.updated.isoformat(),
+                'contentType': blob.content_type
+            })
+        
+        return jsonify({
+            'files': files,
+            'count': len(files)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/files/<filename>', methods=['DELETE'])
+def delete_file(filename):
+    """Delete a file from knowledge base"""
+    
+    # Verify authentication
+    user, error = verify_firebase_token()
+    if error:
+        return jsonify({'error': error}), 401
+    
+    try:
+        bucket = storage_client.get_bucket(BUCKET_NAME)
+        blob = bucket.blob(f'uploads/{filename}')
+        blob.delete()
+        
+        return jsonify({
+            'success': True,
+            'message': f'File {filename} deleted',
+            'deleted_by': user.get('email', 'unknown')
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/', methods=['POST', 'OPTIONS'])
+def sales_query():
+    """Handle sales queries with RAG-enhanced responses"""
+    
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    # Verify authentication
+    user, error = verify_firebase_token()
+    if error:
+        return jsonify({'error': error}), 401
+    
+    # Get question
+    data = request.get_json()
+    if not data or 'question' not in data:
+        return jsonify({'error': 'Missing question in request body'}), 400
+    
+    question = data['question'].strip()
+    if not question:
+        return jsonify({'error': 'Question cannot be empty'}), 400
+    
+    try:
+        # Get or create RAG corpus
+        corpus = get_or_create_rag_corpus()
+        
+        if not corpus:
+            # Fallback to basic Gemini without RAG
+            return fallback_query(question, user)
+        
+        # Query with RAG
+        response = rag.retrieval_query(
+            rag_resources=[
+                rag.RagResource(
+                    rag_corpus=corpus.name,
+                )
+            ],
+            text=question,
+            similarity_top_k=5,
+            vector_distance_threshold=0.5,
+        )
+        
+        # Extract retrieved contexts
+        contexts = []
+        if hasattr(response, 'contexts'):
+            for context in response.contexts.contexts[:3]:  # Top 3 contexts
+                contexts.append({
+                    'text': context.text[:500],  # First 500 chars
+                    'source': context.source_uri if hasattr(context, 'source_uri') else 'unknown'
+                })
+        
+        # Create enhanced prompt with RAG context
+        rag_context = "\n\n".join([f"Context {i+1}:\n{c['text']}" for i, c in enumerate(contexts)])
+        
+        enhanced_prompt = f"""
+You are a CryoCord sales compliance assistant. Use the following knowledge base context to answer the customer's question.
+
+KNOWLEDGE BASE CONTEXT:
+{rag_context}
+
+CUSTOMER QUESTION:
+{question}
+
+Please provide:
+
+1. COMPLIANCE SUMMARY (for internal use):
+   - Key regulatory considerations
+   - Required disclosures based on the knowledge base
+   - Risk factors to address
+   - Recommended talking points
+
+2. CUSTOMER ANSWER (for customer-facing response):
+   - Clear, accurate answer based on the knowledge base
+   - Compliant language
+   - Relevant disclaimers if needed
+
+If the knowledge base doesn't contain relevant information, acknowledge this and provide general guidance.
+"""
+        
+        # Query Gemini with enhanced prompt
+        gemini_response = model.generate_content(enhanced_prompt)
+        full_response = gemini_response.text
+        
+        # Parse response
+        if "COMPLIANCE SUMMARY:" in full_response and "CUSTOMER ANSWER:" in full_response:
+            parts = full_response.split("CUSTOMER ANSWER:")
+            compliance_part = parts[0].replace("COMPLIANCE SUMMARY:", "").strip()
+            customer_part = parts[1].strip()
+        else:
+            compliance_part = "Review required: Check response format"
+            customer_part = full_response
+        
+        return jsonify({
+            'complianceSummary': compliance_part,
+            'customerAnswer': customer_part,
+            'sources': contexts,
+            'user': user.get('email', 'unknown'),
+            'timestamp': datetime.now().isoformat(),
+            'rag_enabled': True
+        }), 200
+        
+    except Exception as e:
+        print(f"RAG query error: {e}")
+        # Fallback to basic query
+        return fallback_query(question, user)
+
+def fallback_query(question, user):
+    """Fallback query without RAG"""
+    try:
+        basic_prompt = f"""
+You are a CryoCord sales compliance assistant.
+
+Customer Question: {question}
+
+Provide:
+1. COMPLIANCE SUMMARY (internal notes)
+2. CUSTOMER ANSWER (customer-facing response)
+"""
+        
+        response = model.generate_content(basic_prompt)
+        full_response = response.text
+        
+        if "COMPLIANCE SUMMARY:" in full_response and "CUSTOMER ANSWER:" in full_response:
+            parts = full_response.split("CUSTOMER ANSWER:")
+            compliance_part = parts[0].replace("COMPLIANCE SUMMARY:", "").strip()
+            customer_part = parts[1].strip()
+        else:
+            compliance_part = "Review required"
+            customer_part = full_response
+        
+        return jsonify({
+            'complianceSummary': compliance_part,
+            'customerAnswer': customer_part,
+            'user': user.get('email', 'unknown'),
+            'timestamp': datetime.now().isoformat(),
+            'rag_enabled': False,
+            'note': 'RAG not available, using basic model'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)
+```
+
+---
+
+## 🚀 **Deployment Files**
+
+### **Dockerfile**
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
+```
+
+### **.gcloudignore**
+
+```
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+```
+
+---
+
+## 📋 **Deployment Steps**
+
+### **Step 1: Enable Required APIs**
+
+Run in Cloud Shell:
+
+```bash
+# Set project
+gcloud config set project cryocord-ai-platform
+
+# Enable required APIs
+gcloud services enable \
+  run.googleapis.com \
+  aiplatform.googleapis.com \
+  storage.googleapis.com \
+  firestore.googleapis.com
+```
+
+### **Step 2: Create Deployment Package**
+
+**Option A: In Cloud Shell**
+
+```bash
+# Create directory
+mkdir ~/cryocord-backend
+cd ~/cryocord-backend
+
+# Create files (copy content from above)
+cat > main.py << 'EOF'
+[Paste main.py content here]
+EOF
+
+cat > requirements.txt << 'EOF'
+[Paste requirements.txt content here]
+EOF
+
+cat > Dockerfile << 'EOF'
+[Paste Dockerfile content here]
+EOF
+```
+
+**Option B: Upload from Your Mac**
+
+1. Create a folder on your Mac: `cryocord-backend`
+2. Create `main.py`, `requirements.txt`, `Dockerfile` with the content above
+3. Upload to Cloud Shell (drag & drop files to Cloud Shell editor)
+
+### **Step 3: Deploy to Cloud Run**
+
+```bash
+cd ~/cryocord-backend
+
+# Deploy
+gcloud run deploy cryocord-sales-query \
+  --source . \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --timeout 300 \
+  --set-env-vars PROJECT_ID=cryocord-ai-platform
+
+# Get the URL
+gcloud run services describe cryocord-sales-query \
+  --region us-central1 \
+  --format='value(status.url)'
+```
+
+---
+
+## 🧪 **Testing**
+
+### **Test 1: Health Check**
+
+```bash
+curl https://cryocord-sales-query-1034418228298.us-central1.run.app/health
+```
+
+Expected:
+```json
+{
+  "status": "healthy",
+  "service": "cryocord-sales-query",
+  "vertex_rag": "enabled"
+}
+```
+
+### **Test 2: Upload File (from your app)**
+
+1. Log into your app
+2. Go to Admin Panel
+3. Click "Upload Document"
+4. Select a PDF or document
+5. Click "Upload"
+6. File should be uploaded and indexed
+
+### **Test 3: Query with RAG**
+
+1. Go to main chat interface
+2. Ask a question related to uploaded documents
+3. You should get answers based on your knowledge base
+4. Response will include "sources" from uploaded files
+
+---
+
+## 📊 **API Endpoints**
+
+### **POST /** - Sales Query with RAG
+```json
+Request:
+{
+  "question": "What are the storage options?"
+}
+
+Response:
+{
+  "complianceSummary": "...",
+  "customerAnswer": "...",
+  "sources": [...],
+  "rag_enabled": true
+}
+```
+
+### **POST /upload** - Upload File
+```
+Content-Type: multipart/form-data
+file: [file data]
+type: "document"
+description: "Product guidelines"
+```
+
+### **GET /files** - List Files
+```json
+Response:
+{
+  "files": [...],
+  "count": 5
+}
+```
+
+### **DELETE /files/:filename** - Delete File
+```json
+Response:
+{
+  "success": true,
+  "message": "File deleted"
+}
+```
+
+---
+
+## 🎯 **What This Backend Does**
+
+1. ✅ **Accepts Firebase authentication** - Verifies ID tokens
+2. ✅ **CORS configured** - Works with your Firebase frontend
+3. ✅ **File uploads** - Stores files in Cloud Storage
+4. ✅ **RAG indexing** - Indexes uploaded files in Vertex AI RAG
+5. ✅ **Smart querying** - Uses RAG to search uploaded documents
+6. ✅ **Context-aware answers** - Answers based on your knowledge base
+7. ✅ **Fallback mode** - Works even without uploaded files
+
+---
+
+## 💰 **Cost Considerations**
+
+- Vertex AI RAG: ~$0.50 per 1M characters processed
+- Cloud Storage: ~$0.02 per GB per month
+- Cloud Run: Free tier covers light usage
+- Gemini API: Pay per request
+
+For typical usage (100-500 queries/day with 10-20 documents), expect $10-30/month.
+
+---
+
+## 🔧 **Customization**
+
+### **Adjust RAG Parameters:**
+
+In `sales_query()`:
+```python
+response = rag.retrieval_query(
+    rag_resources=[...],
+    text=question,
+    similarity_top_k=5,        # Number of results
+    vector_distance_threshold=0.5  # Relevance threshold
+)
+```
+
+### **Change Model:**
+
+```python
+model = GenerativeModel('gemini-1.5-pro')  # More capable
+# or
+model = GenerativeModel('gemini-1.5-flash')  # Faster
+```
+
+---
+
+## ✅ **Next Steps**
+
+1. Copy the backend code files
+2. Deploy to Cloud Run using the commands above
+3. Test health endpoint
+4. Upload documents through Admin Panel
+5. Ask questions and see RAG-powered answers!
+
+---
+
+**This is a complete, production-ready backend with Vertex AI RAG!** 🚀
