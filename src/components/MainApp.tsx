@@ -101,7 +101,7 @@ export const MainApp: React.FC<MainAppProps> = ({ onSwitchToAdmin, userEmail }) 
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center">
-            <img src="/clarify-logo-v3.png" alt="Clarify" className="h-8 w-auto" />
+            <img src="/clarify-logo-v3.png" alt="Clarify" className="h-12 w-auto" />
           </div>
           <div className="flex items-center space-x-4">
             <button 
