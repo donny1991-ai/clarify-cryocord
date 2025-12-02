@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Ambient Background Animations */
+@keyframes float-1 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate(10px, -10px) rotate(3deg) scale(1.03); }
+}
+
+@keyframes float-2 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate(-10px, 15px) rotate(-5deg) scale(1.04); }
+}
+
+@keyframes float-3 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate(5px, 10px) rotate(8deg) scale(1.05); }
+}
+
+@keyframes float-4 {
+  0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate(-5px, -5px) rotate(-6deg) scale(1.06); }
+}
+
+@keyframes pulse-nucleus {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.05); }
+}
+
+@keyframes particle-float-1 {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50% { transform: translateY(-30px); opacity: 0.6; }
+}
+
+@keyframes particle-float-2 {
+  0%, 100% { transform: translateY(0); opacity: 0.35; }
+  50% { transform: translateY(40px); opacity: 0.5; }
+}
+
+@keyframes particle-float-3 {
+  0%, 100% { transform: translate(0, 0); opacity: 0.3; }
+  50% { transform: translate(15px, -25px); opacity: 0.5; }
+}
+
+.cell-1 { animation: float-1 20s ease-in-out infinite; }
+.cell-2 { animation: float-2 25s ease-in-out infinite; }
+.cell-3 { animation: float-3 18s ease-in-out infinite; }
+.cell-4 { animation: float-4 22s ease-in-out infinite; }
+
+.nucleus { animation: pulse-nucleus 8s ease-in-out infinite; }
+
+.particle-1 { animation: particle-float-1 5s ease-in-out infinite; }
+.particle-2 { animation: particle-float-2 7s ease-in-out infinite; }
+.particle-3 { animation: particle-float-3 6s ease-in-out infinite; }
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.5s ease-out;
+}
