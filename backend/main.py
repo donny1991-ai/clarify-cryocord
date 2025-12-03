@@ -38,7 +38,7 @@ vertexai.init(project=PROJECT_ID, location=LOCATION)
 aiplatform.init(project=PROJECT_ID, location=LOCATION)
 
 storage_client = storage.Client()
-model = GenerativeModel('gemini-1.5-flash-001')
+model = GenerativeModel('gemini-1.5-flash')
 
 def verify_firebase_token():
     """Verify Firebase ID token"""
