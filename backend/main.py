@@ -38,7 +38,29 @@ vertexai.init(project=PROJECT_ID, location=LOCATION)
 aiplatform.init(project=PROJECT_ID, location=LOCATION)
 
 storage_client = storage.Client()
-model = GenerativeModel('gemini-pro')
+
+# Try multiple model names until one works
+MODEL_NAMES = [
+    'gemini-1.0-pro',
+    'gemini-pro',
+    'gemini-1.5-pro',
+    'text-bison@002',
+    'text-bison'
+]
+
+model = None
+for model_name in MODEL_NAMES:
+    try:
+        model = GenerativeModel(model_name)
+        print(f"Successfully loaded model: {model_name}")
+        break
+    except Exception as e:
+        print(f"Failed to load {model_name}: {e}")
+        continue
+
+if model is None:
+    print("WARNING: No Gemini model available, using fallback")
+    model = GenerativeModel('text-bison')
 
 def verify_firebase_token():
     """Verify Firebase ID token"""
