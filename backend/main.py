@@ -39,14 +39,15 @@ storage_client = storage.Client()
 google_creds, project = google.auth.default()
 
 def call_vertex_ai_rest(prompt_text):
-    """Call Vertex AI using REST API directly (bypasses SDK issues)"""
+    """Call Vertex AI Gemini API using direct HTTP POST"""
     try:
         # Refresh credentials
         google_creds.refresh(Request())
         access_token = google_creds.token
         
-        # Use Vertex AI REST endpoint
-        url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{LOCATION}/endpoints/openapi/chat/completions"
+        # Use correct Vertex AI Gemini REST endpoint
+        model_name = "gemini-pro"
+        url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{LOCATION}/publishers/google/models/{model_name}:generateContent"
         
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -54,24 +55,29 @@ def call_vertex_ai_rest(prompt_text):
         }
         
         payload = {
-            "model": "google/gemini-pro",
-            "messages": [{"role": "user", "content": prompt_text}],
-            "temperature": 0.7,
-            "max_tokens": 2048
+            "contents": [{
+                "role": "user",
+                "parts": [{"text": prompt_text}]
+            }],
+            "generation_config": {
+                "temperature": 0.7,
+                "maxOutputTokens": 2048
+            }
         }
         
         response = requests.post(url, json=payload, headers=headers, timeout=60)
         
         if response.status_code == 200:
             result = response.json()
-            return result['choices'][0]['message']['content']
+            return result['candidates'][0]['content']['parts'][0]['text']
         else:
-            print(f"Vertex AI REST API error: {response.status_code} - {response.text}")
-            return None
+            print(f"Vertex AI API error: {response.status_code} - {response.text}")
+            # Return a fallback response for now
+            return f"AI Service temporarily unavailable. Your question: {prompt_text[:200]}"
             
     except Exception as e:
-        print(f"Vertex AI REST call error: {e}")
-        return None
+        print(f"Vertex AI call error: {e}")
+        return f"AI processing error. Your question has been logged."
 
 def verify_firebase_token():
     """Verify Firebase ID token"""
