@@ -3,14 +3,14 @@ from flask_cors import CORS
 import firebase_admin
 from firebase_admin import auth, credentials
 from google.cloud import storage
-from google.cloud import aiplatform
-from vertexai.generative_models import GenerativeModel
-import vertexai
 import os
 from datetime import datetime
 import tempfile
 import PyPDF2
 import docx
+import requests
+import google.auth
+from google.auth.transport.requests import Request
 
 app = Flask(__name__)
 
@@ -33,24 +33,45 @@ BUCKET_NAME = f'{PROJECT_ID}-rag-docs'
 cred = credentials.ApplicationDefault()
 firebase_admin.initialize_app(cred, {'projectId': PROJECT_ID})
 
-# Initialize Vertex AI
-vertexai.init(project=PROJECT_ID, location=LOCATION)
-aiplatform.init(project=PROJECT_ID, location=LOCATION)
-
 storage_client = storage.Client()
 
-# Use text-bison (PaLM 2) - older but stable model
-try:
-    model = GenerativeModel('text-bison@002')
-    print("Successfully loaded model: text-bison@002")
-except Exception as e:
-    print(f"Failed to load text-bison@002: {e}")
+# Get Google Cloud credentials for API calls
+google_creds, project = google.auth.default()
+
+def call_vertex_ai_rest(prompt_text):
+    """Call Vertex AI using REST API directly (bypasses SDK issues)"""
     try:
-        model = GenerativeModel('text-bison')
-        print("Successfully loaded model: text-bison")
-    except Exception as e2:
-        print(f"CRITICAL: No models available - {e2}")
-        model = None
+        # Refresh credentials
+        google_creds.refresh(Request())
+        access_token = google_creds.token
+        
+        # Use Vertex AI REST endpoint
+        url = f"https://{LOCATION}-aiplatform.googleapis.com/v1/projects/{PROJECT_ID}/locations/{LOCATION}/endpoints/openapi/chat/completions"
+        
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "google/gemini-pro",
+            "messages": [{"role": "user", "content": prompt_text}],
+            "temperature": 0.7,
+            "max_tokens": 2048
+        }
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=60)
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message']['content']
+        else:
+            print(f"Vertex AI REST API error: {response.status_code} - {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"Vertex AI REST call error: {e}")
+        return None
 
 def verify_firebase_token():
     """Verify Firebase ID token"""
@@ -312,9 +333,11 @@ Based on the knowledge base documents above, provide:
 If the documents don't contain relevant information, acknowledge this and provide general guidance.
 """
         
-        # Query Gemini with document context
-        response = model.generate_content(prompt)
-        full_response = response.text
+        # Query Gemini via REST API (bypasses SDK model loading issues)
+        full_response = call_vertex_ai_rest(prompt)
+        
+        if not full_response:
+            return jsonify({'error': 'AI model API call failed'}), 500
         
         # Parse response
         if "COMPLIANCE SUMMARY:" in full_response and "CUSTOMER ANSWER:" in full_response:
