@@ -39,21 +39,18 @@ aiplatform.init(project=PROJECT_ID, location=LOCATION)
 
 storage_client = storage.Client()
 
-# Use Gemini 1.5 Pro (stable production model)
+# Use text-bison (PaLM 2) - older but stable model
 try:
-    model = GenerativeModel('gemini-1.5-pro-001')
-    print("Successfully loaded model: gemini-1.5-pro-001")
+    model = GenerativeModel('text-bison@002')
+    print("Successfully loaded model: text-bison@002")
 except Exception as e:
-    print(f"Failed to load gemini-1.5-pro-001: {e}")
-    # Fallback to gemini-pro
+    print(f"Failed to load text-bison@002: {e}")
     try:
-        model = GenerativeModel('gemini-1.5-pro')
-        print("Successfully loaded model: gemini-1.5-pro")
+        model = GenerativeModel('text-bison')
+        print("Successfully loaded model: text-bison")
     except Exception as e2:
-        print(f"Failed to load gemini-1.5-pro: {e2}")
-        # Last resort: use PaLM 2
-        model = GenerativeModel('text-bison@002')
-        print("Using fallback model: text-bison@002")
+        print(f"CRITICAL: No models available - {e2}")
+        model = None
 
 def verify_firebase_token():
     """Verify Firebase ID token"""
